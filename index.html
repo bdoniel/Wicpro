@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Vault</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, remove }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+const app = initializeApp({
+  apiKey:"AIzaSyDyn-0tNhiB6jPWKQzZSHc0t470JYahJoo",
+  authDomain:"qr-vault-be047.firebaseapp.com",
+  databaseURL:"https://qr-vault-be047-default-rtdb.firebaseio.com",
+  projectId:"qr-vault-be047",
+  storageBucket:"qr-vault-be047.firebasestorage.app",
+  messagingSenderId:"469897558507",
+  appId:"1:469897558507:web:8e9eb783c5df4b797441ae"
+});
+const db = getDatabase(app);
+window._fb = {db,ref,set,get,update,onValue,remove};
+document.dispatchEvent(new Event('fb-ready'));
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap');
+:root{--bg:#0a0a0f;--s:#111118;--c:#16161f;--b:#252535;--a:#6ee7b7;--a2:#818cf8;--r:#f87171;--g:#f59e0b;--w:#fbbf24;--t:#e2e8f0;--m:#64748b;--rad:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(var(--b) 1px,transparent 1px),linear-gradient(90deg,var(--b) 1px,transparent 1px);background-size:40px 40px;opacity:.2;pointer-events:none;z-index:0}
+
+/* Loading */
+#loading{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+#loading.hide{display:none}
+.spin{width:40px;height:40px;border:3px solid var(--b);border-top-color:var(--a);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#loading p{color:var(--m);font-size:13px;font-family:'DM Mono',monospace}
+
+/* Scan page */
+#scan-page{display:none;position:fixed;inset:0;background:var(--bg);z-index:100;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:24px}
+#scan-page.open{display:flex}
+.s-icon{font-size:80px;margin-bottom:24px}
+.s-title{font-size:30px;font-weight:800;margin-bottom:12px}
+.s-sub{color:var(--m);font-size:15px;line-height:1.8;margin-bottom:20px;white-space:pre-line}
+.s-cd{font-family:'DM Mono',monospace;font-size:16px;color:var(--a);font-weight:700}
+
+/* App */
+#app{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:28px 20px;display:none}
+
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:36px;padding-bottom:20px;border-bottom:1px solid var(--b);flex-wrap:wrap;gap:14px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--a),var(--a2));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.logo h1{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.logo h1 span{color:var(--a)}
+.logo small{display:block;font-size:10px;color:var(--m);font-family:'DM Mono',monospace;letter-spacing:1px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--m);margin-right:5px;transition:background .3s;vertical-align:middle}
+.dot.on{background:var(--a)}
+.hright{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tnav{display:flex;gap:3px;background:var(--s);padding:4px;border-radius:10px;border:1px solid var(--b)}
+.tb{padding:7px 16px;border:none;background:transparent;color:var(--m);font-family:'Syne',sans-serif;font-size:12px;font-weight:600;border-radius:7px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.tb.active{background:var(--c);color:var(--t)}
+.tb:hover:not(.active){color:var(--t)}
+
+/* Panels */
+.panel{display:none}.panel.active{display:block;animation:fi .25s ease}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{background:var(--c);border:1px solid var(--b);border-radius:var(--rad);padding:28px;margin-bottom:24px}
+.card h2{font-size:16px;font-weight:700;margin-bottom:20px}
+.card h2 span{color:var(--a)}
+
+/* Form */
+.fg{display:flex;flex-direction:column;gap:14px}
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fgp{display:flex;flex-direction:column;gap:7px}
+.fgp.full{grid-column:1/-1}
+label{font-size:11px;font-weight:700;color:var(--m);letter-spacing:.8px;text-transform:uppercase}
+input,select{width:100%;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:11px 13px;color:var(--t);font-family:'DM Mono',monospace;font-size:13px;outline:none;transition:border-color .2s}
+input:focus,select:focus{border-color:var(--a2)}
+select option{background:var(--s)}
+.pw{display:flex;gap:8px;align-items:center}
+.cur{background:var(--b);color:var(--m);padding:11px 12px;border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;font-weight:700;white-space:nowrap}
+.pw input{flex:1}
+.fa2{margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:11px 22px;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
+.btn-p{background:linear-gradient(135deg,var(--a),#34d399);color:#0a0a0f}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(110,231,183,.2)}
+.btn-g{background:linear-gradient(135deg,var(--g),#d97706);color:#0a0a0f}
+.btn-g:hover{transform:translateY(-1px)}
+.btn-gh{background:var(--s);color:var(--t);border:1px solid var(--b)}
+.btn-gh:hover{border-color:var(--a2)}
+.bsm{background:var(--s);color:var(--a2);border:1px solid var(--b);padding:5px 12px;font-size:11px;font-family:'Syne',sans-serif;font-weight:600;border-radius:7px;cursor:pointer;transition:all .2s}
+.bsm:hover{border-color:var(--a2)}
+.bdr{background:transparent;color:var(--r);border:1px solid var(--r);padding:5px 12px;font-size:11px;border-radius:7px;cursor:pointer;font-family:'Syne',sans-serif;font-weight:600}
+.bdr:hover{background:rgba(248,113,113,.1)}
+
+/* QR Result */
+.res{background:var(--c);border:1px solid var(--b);border-radius:var(--rad);padding:28px;margin-bottom:24px;display:none;text-align:center}
+.res.show{display:block;animation:fi .3s ease}
+.qbox{display:inline-block;margin-bottom:20px;width:100%}
+.qinfo{background:var(--s);border:1px solid var(--b);border-radius:8px;padding:14px;margin-bottom:16px;text-align:left}
+.qinfo p{font-family:'DM Mono',monospace;font-size:12px;color:var(--m);margin-bottom:5px}
+.qinfo p:last-child{margin-bottom:0}
+.qinfo span{color:var(--t);font-weight:600}
+.qinfo .hl{color:var(--a)}
+.dlbtn{width:100%;padding:12px;background:var(--s);color:var(--a2);border:1px solid var(--b);border-radius:8px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;margin-bottom:8px}
+.dlbtn:hover{border-color:var(--a2)}
+.nbtn{width:100%;padding:12px;background:transparent;color:var(--m);border:1px solid var(--b);border-radius:8px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
+.nbtn:hover{color:var(--t);border-color:var(--m)}
+
+/* QR List */
+.qr-grid{display:grid;gap:12px}
+.qi{background:var(--s);border:1px solid var(--b);border-radius:10px;padding:14px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.qth{width:56px;height:56px;background:white;border-radius:6px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.qth canvas,.qth img{width:52px!important;height:52px!important}
+.qii h3{font-size:13px;font-weight:700;margin-bottom:2px}
+.qat{font-size:11px;color:var(--g);font-family:'DM Mono',monospace;margin-bottom:5px}
+.qmt{display:flex;gap:6px;flex-wrap:wrap}
+.tg{font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:10px;font-weight:600}
+.tg-g{background:rgba(110,231,183,.12);color:var(--a);border:1px solid rgba(110,231,183,.2)}
+.tg-r{background:rgba(248,113,113,.12);color:var(--r);border:1px solid rgba(248,113,113,.2)}
+.tg-p{background:rgba(129,140,248,.12);color:var(--a2);border:1px solid rgba(129,140,248,.2)}
+.tg-go{background:rgba(245,158,11,.12);color:var(--g);border:1px solid rgba(245,158,11,.2)}
+.bw{margin-top:6px}.br2{height:3px;background:var(--b);border-radius:2px;overflow:hidden}
+.bf{height:100%;border-radius:2px;transition:width .3s}
+.qac{display:flex;flex-direction:column;gap:5px}
+
+/* Media Player */
+#player-page{display:none;position:fixed;inset:0;background:var(--bg);z-index:100;overflow-y:auto;padding:24px 20px}
+#player-page.open{display:block}
+.player-wrap{max-width:500px;margin:0 auto;text-align:center;padding-bottom:40px}
+.player-artist{font-size:13px;color:var(--g);font-family:'DM Mono',monospace;font-weight:600;margin-bottom:6px;letter-spacing:1px}
+.player-title{font-size:24px;font-weight:800;margin-bottom:24px}
+.player-cover{width:220px;height:220px;background:linear-gradient(135deg,var(--a2),var(--a));border-radius:16px;margin:0 auto 28px;display:flex;align-items:center;justify-content:center;font-size:80px;box-shadow:0 20px 60px rgba(129,140,248,.3)}
+.player-audio{width:100%;margin-bottom:20px;border-radius:8px}
+.player-video{width:100%;border-radius:12px;margin-bottom:20px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.dl-once-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--a),#34d399);color:#0a0a0f;border:none;border-radius:8px;font-family:'Syne',sans-serif;font-size:14px;font-weight:800;cursor:pointer;transition:all .2s;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px}
+.dl-once-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(110,231,183,.25)}
+.dl-once-btn:disabled{background:#252535;color:var(--m);cursor:not-allowed;transform:none;box-shadow:none}
+.dl-note{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;margin-bottom:20px}
+.player-code{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:14px;margin-top:20px}
+.player-code p{font-size:11px;color:var(--m);font-family:'DM Mono',monospace;margin-bottom:6px}
+.player-code span{font-size:20px;font-weight:800;color:var(--a);font-family:'DM Mono',monospace}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.sc{background:var(--c);border:1px solid var(--b);border-radius:var(--rad);padding:18px 22px}
+.sl{font-size:10px;color:var(--m);letter-spacing:.8px;text-transform:uppercase;margin-bottom:8px;font-family:'DM Mono',monospace}
+.sv{font-size:28px;font-weight:800}
+.sv.gn{color:var(--a)}.sv.pu{color:var(--a2)}.sv.rd{color:var(--r)}.sv.go{color:var(--g)}
+
+/* Artist cards */
+.artist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px}
+.ac{background:var(--c);border:1px solid var(--b);border-radius:var(--rad);padding:22px;position:relative;overflow:hidden}
+.ac::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--g),var(--a2))}
+.ac-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.ac-name{font-size:16px;font-weight:800}
+.ac-rev{font-family:'DM Mono',monospace;font-size:17px;font-weight:700;color:var(--g)}
+.ac-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.ac-stat{text-align:center}
+.ac-sv{font-size:20px;font-weight:800}
+.ac-sl{font-size:10px;color:var(--m);font-family:'DM Mono',monospace;margin-top:2px}
+.ac-tracks{border-top:1px solid var(--b);padding-top:12px}
+.ac-track{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(37,37,53,.5);font-size:12px}
+.ac-track:last-child{border-bottom:none}
+.ac-tname{color:var(--t);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.ac-tinfo{font-family:'DM Mono',monospace;font-size:11px;color:var(--m)}
+.ac-tprice{font-family:'DM Mono',monospace;font-size:11px;color:var(--g);font-weight:600}
+
+/* Log table */
+.lt{width:100%;border-collapse:collapse}
+.lt th{text-align:left;font-size:10px;color:var(--m);letter-spacing:.8px;text-transform:uppercase;padding:9px 14px;border-bottom:1px solid var(--b);font-family:'DM Mono',monospace}
+.lt td{padding:10px 14px;font-family:'DM Mono',monospace;font-size:11px;border-bottom:1px solid rgba(37,37,53,.4)}
+.lt tr:last-child td{border-bottom:none}
+.lt tr:hover td{background:rgba(255,255,255,.015)}
+
+/* PDF overlay */
+.po{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center;flex-direction:column}
+.po.open{display:flex}
+.po .spin{border-top-color:var(--g);margin-bottom:18px}
+.po p{color:var(--t);font-size:14px;font-weight:600}
+
+/* Empty */
+.empty{text-align:center;padding:40px;color:var(--m);font-size:13px;font-family:'DM Mono',monospace}
+
+/* Notif */
+.notif{position:fixed;bottom:20px;right:20px;background:var(--c);border:1px solid var(--a);border-radius:10px;padding:12px 18px;font-size:13px;z-index:9999;animation:ni .3s ease}
+@keyframes ni{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+@media(max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr)}.fg2{grid-template-columns:1fr}.qi{grid-template-columns:1fr}.artist-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spin"></div><p id="lmsg">Connexion Firebase...</p></div>
+
+<!-- Media Player Page -->
+<div id="player-page">
+  <div class="player-wrap">
+    <div class="player-artist" id="pl-artist"></div>
+    <div class="player-title" id="pl-title"></div>
+    <div class="player-cover" id="pl-cover">🎵</div>
+    <div id="pl-media"></div>
+    <button class="dl-once-btn" id="dl-btn" onclick="doDownload()">
+      &#8659; Telecharger (1 fois uniquement)
+    </button>
+    <div class="dl-note" id="dl-note">Ce bouton disparaitra apres telechargement</div>
+    <div class="player-code" id="pl-code">
+      <p>TON CODE DE RENOUVELLEMENT</p>
+      <span id="pl-code-val"></span>
+    </div>
+  </div>
+</div>
+
+<div id="scan-page">
+  <div class="s-icon" id="si"></div>
+  <div class="s-title" id="st"></div>
+  <div class="s-sub" id="ss"></div>
+  <div class="s-cd" id="sc"></div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">&#11035;</div>
+      <div>
+        <h1>QR <span>Vault</span></h1>
+        <small><span class="dot" id="dot"></span>FIREBASE LIVE</small>
+      </div>
+    </div>
+    <div class="hright">
+      <button class="btn btn-g" onclick="xAllPDF()">&#128424; Export PDF</button>
+      <nav class="tnav">
+        <button class="tb active" onclick="showTab('gen',event)">&#10022; Generateur</button>
+        <button class="tb" onclick="showTab('dash',event)">&#9672; Dashboard</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- GENERATEUR -->
+  <div class="panel active" id="panel-gen">
+    <div class="card">
+      <h2>Creer un QR Code <span>limite</span></h2>
+      <div class="fg2">
+        <div class="fgp">
+          <label>Artiste</label>
+          <div style="display:flex;gap:8px">
+            <select id="fa-sel" style="flex:1"><option value="">-- Existant --</option></select>
+            <input type="text" id="fa-new" placeholder="Nouvel artiste..." style="flex:1" />
+          </div>
+        </div>
+        <div class="fgp">
+          <label>Titre du morceau / album</label>
+          <input type="text" id="fn" placeholder="Ex : Album Vol.1" />
+        </div>
+        <div class="fgp full">
+          <label>Lien du fichier (Cloudflare R2, Drive, Dropbox)</label>
+          <input type="url" id="fu" placeholder="https://pub-1c8fb5f511e443fe9a413e70186216e5.r2.dev/monfichier.mp3" />
+        </div>
+        <div class="fgp">
+          <label>Nombre de scans max</label>
+          <input type="number" id="fl" value="1" min="1" max="999" />
+        </div>
+        <div class="fgp">
+          <label>Prix de vente</label>
+          <div class="pw"><span class="cur">FCFA</span><input type="number" id="fp" placeholder="0" min="0" /></div>
+        </div>
+        <div class="fgp full">
+          <label>Message quand expire</label>
+          <input type="text" id="fm" placeholder="Ex : Acces expire. Contactez BDoniel." />
+        </div>
+      </div>
+      <div class="fa2">
+        <button class="btn btn-p" onclick="creerQR()">&#11035; Generer le QR Code</button>
+        <button class="btn btn-gh" onclick="clearForm()">Effacer</button>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="res" id="res">
+      <div class="qbox" id="qbox"></div>
+      <div class="qinfo" id="qinfo"></div>
+      <button class="dlbtn" onclick="dlPNG()">&#8659; Telecharger PNG (carte complete)</button>
+      <button class="nbtn" onclick="nouveau()">+ Nouveau QR Code</button>
+    </div>
+
+    <!-- List -->
+    <div class="card">
+      <h2>Mes QR Codes <span id="lc"></span></h2>
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="search" placeholder="Rechercher par code, artiste, titre..." oninput="renderList()" style="flex:1;min-width:200px;padding:8px 12px;font-size:12px" />
+        <select id="filter-artist" onchange="renderList()" style="width:auto;padding:7px 12px;font-size:12px"><option value="">Tous les artistes</option></select>
+        <select id="filter-status" onchange="renderList()" style="width:auto;padding:7px 12px;font-size:12px">
+          <option value="">Tous</option><option value="active">Actifs</option><option value="expired">Expires</option>
+        </select>
+        <button class="bsm" style="color:var(--r);border-color:var(--r);white-space:nowrap" onclick="filtrerExpires()">&#128683; Expires seulement</button>
+        <button class="bsm" onclick="clearFilters()">Tout afficher</button>
+      </div>
+      <div class="qr-grid" id="lst"></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="panel" id="panel-dash">
+    <!-- Stats globales -->
+    <div class="stats-row" id="stats"></div>
+
+    <!-- Rapport par artiste -->
+    <div class="card">
+      <h2>Rapport par <span>Artiste</span></h2>
+      <div class="artist-grid" id="art-grid"></div>
+      <div class="empty" id="art-empty" style="display:none">Aucun artiste enregistre.</div>
+    </div>
+
+    <!-- Journal scans -->
+    <div class="card">
+      <h2>Journal des <span>Scans</span></h2>
+      <div id="log-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PDF overlay -->
+<div class="po" id="po"><div class="spin"></div><p id="pmsg">Generation PDF...</p></div>
+
+<script>
+const BASE = 'https://wicpro.netlify.app';
+let items = [], logs = [], lastId = null;
+
+function fb(p){ return window._fb.ref(window._fb.db, p); }
+
+// ── Firebase ready ─────────────────────────────────────────────────────────────
+document.addEventListener('fb-ready', () => {
+  document.getElementById('dot').classList.add('on');
+  const sid = new URLSearchParams(location.search).get('scan');
+  if (sid) { handleScan(sid); return; }
+  document.getElementById('loading').classList.add('hide');
+  document.getElementById('app').style.display = 'block';
+  window._fb.onValue(fb('qrcodes'), snap => {
+    items = Object.values(snap.val()||{}).sort((a,b)=>(b.created||0)-(a.created||0));
+    refreshSelects(); renderList();
+  });
+  window._fb.onValue(fb('scanlogs'), snap => {
+    logs = Object.values(snap.val()||{}).sort((a,b)=>(b.time||0)-(a.time||0));
+  });
+});
+
+// ── Scan handler ───────────────────────────────────────────────────────────────
+async function handleScan(id) {
+  document.getElementById('lmsg').textContent = 'Verification acces...';
+  try {
+    const item = (await window._fb.get(fb('qrcodes/'+id))).val();
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('scan-page').classList.add('open');
+    if (!item) {
+      document.getElementById('si').textContent = '?';
+      document.getElementById('st').textContent = 'QR introuvable';
+      document.getElementById('ss').textContent = 'Ce QR code nexiste pas.';
+      return;
+    }
+    if (item.scans >= item.limit) {
+      document.getElementById('si').textContent = 'X';
+      document.getElementById('st').textContent = 'Acces expire';
+      document.getElementById('ss').innerHTML =
+        (item.expiredMsg||'Ce QR a atteint sa limite.') +
+        '<br><br>' +
+        '<div style="background:#16161f;border:2px solid #6ee7b7;border-radius:12px;padding:16px 24px;display:inline-block;margin-top:8px">' +
+        '<div style="font-size:12px;color:#64748b;font-family:DM Mono,monospace;margin-bottom:6px">TON CODE DE RENOUVELLEMENT</div>' +
+        '<div style="font-size:28px;font-weight:800;color:#6ee7b7;font-family:DM Mono,monospace">#'+(item.code||item.id.slice(-6))+'</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:6px;font-family:DM Mono,monospace">Communique ce code pour renouveler ton acces</div>' +
+        '</div>';
+    } else {
+      const ns = item.scans + 1;
+      await window._fb.update(fb('qrcodes/'+id), {scans:ns});
+      await window._fb.set(fb('scanlogs/log_'+Date.now()), {
+        qrId:id, artist:item.artist, name:item.name, time:Date.now(), remaining:item.limit-ns, price:item.price||0
+      });
+      // Show media player instead of redirecting
+      showPlayer(item, id);
+    }
+  } catch(e) {
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('scan-page').classList.add('open');
+    document.getElementById('si').textContent='!';
+    document.getElementById('st').textContent='Erreur';
+    document.getElementById('ss').textContent='Impossible de verifier. Reessaie.';
+  }
+}
+
+// ── Media Player ───────────────────────────────────────────────────────────────
+let currentPlayerItem = null;
+let currentPlayerQRId = null;
+
+async function showPlayer(item, qrId) {
+  currentPlayerItem = item;
+  currentPlayerQRId = qrId;
+
+  document.getElementById('loading').classList.add('hide');
+  document.getElementById('player-page').classList.add('open');
+
+  // Set info
+  document.getElementById('pl-artist').textContent = item.artist.toUpperCase();
+  document.getElementById('pl-title').textContent = item.name;
+  document.getElementById('pl-code-val').textContent = '#' + (item.code || '----');
+
+  // Detect file type from URL
+  const url = item.url;
+  const isVideo = /\.(mp4|webm|mov|avi|mkv)/i.test(url);
+  const isAudio = /\.(mp3|wav|ogg|aac|flac|m4a)/i.test(url);
+
+  const mediaEl = document.getElementById('pl-media');
+  mediaEl.innerHTML = '';
+
+  if (isVideo) {
+    document.getElementById('pl-cover').style.display = 'none';
+    mediaEl.innerHTML = '<video class="player-video" controls controlsList="nodownload" oncontextmenu="return false"><source src="'+url+'"><p>Ton navigateur ne supporte pas la lecture video.</p></video>';
+  } else if (isAudio) {
+    document.getElementById('pl-cover').textContent = '🎵';
+    mediaEl.innerHTML = '<audio class="player-audio" controls controlsList="nodownload" oncontextmenu="return false"><source src="'+url+'"><p>Ton navigateur ne supporte pas la lecture audio.</p></audio>';
+  } else {
+    // Unknown type - try audio first
+    mediaEl.innerHTML = '<audio class="player-audio" controls controlsList="nodownload" oncontextmenu="return false"><source src="'+url+'"></audio>';
+  }
+
+  // Check if download already used
+  const dlSnap = await window._fb.get(fb('downloads/'+qrId));
+  const dlData = dlSnap.val();
+  const dlBtn = document.getElementById('dl-btn');
+  const dlNote = document.getElementById('dl-note');
+
+  if (dlData && dlData.used) {
+    dlBtn.disabled = true;
+    dlBtn.textContent = 'Telechargement deja utilise';
+    dlNote.textContent = 'Le telechargement unique a deja ete effectue le ' + new Date(dlData.time).toLocaleDateString('fr-FR');
+  }
+}
+
+async function doDownload() {
+  if (!currentPlayerItem || !currentPlayerQRId) return;
+  const dlBtn = document.getElementById('dl-btn');
+  dlBtn.disabled = true;
+  dlBtn.textContent = 'Telechargement en cours...';
+
+  try {
+    // Mark download as used in Firebase
+    await window._fb.set(fb('downloads/'+currentPlayerQRId), {
+      used: true,
+      time: Date.now(),
+      artist: currentPlayerItem.artist,
+      name: currentPlayerItem.name
+    });
+
+    // Trigger download
+    const a = document.createElement('a');
+    a.href = currentPlayerItem.url;
+    a.download = (currentPlayerItem.artist + '-' + currentPlayerItem.name).replace(/[^a-zA-Z0-9]/g,'_');
+    a.target = '_blank';
+    a.click();
+
+    dlBtn.textContent = 'Telechargement utilise - Plus disponible';
+    document.getElementById('dl-note').textContent = 'Telechargement effectue. Merci !';
+  } catch(e) {
+    dlBtn.disabled = false;
+    dlBtn.textContent = 'Erreur - Reessaie';
+  }
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────────
+function showTab(tab, e) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  if(e&&e.target)e.target.classList.add('active');
+  if(tab==='dash'){renderStats();renderArtists();renderLog();}
+}
+
+// ── Selects ────────────────────────────────────────────────────────────────────
+function getArtists(){return[...new Set(items.map(q=>q.artist).filter(Boolean))].sort();}
+function refreshSelects(){
+  const arts=getArtists();
+  ['fa-sel','filter-artist'].forEach(id=>{
+    const sel=document.getElementById(id),val=sel.value;
+    while(sel.options.length>1)sel.remove(1);
+    arts.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o);});
+    if(val)sel.value=val;
+  });
+}
+
+// ── Create QR ──────────────────────────────────────────────────────────────────
+function genCode(artist) {
+  // Generate short code: first 2 letters of artist + 4 random digits
+  const initials = artist.replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase() || 'QR';
+  const num = String(Math.floor(1000 + Math.random()*9000));
+  return initials + '-' + num;
+}
+
+async function creerQR() {
+  const artist = document.getElementById('fa-new').value.trim()||document.getElementById('fa-sel').value.trim();
+  const name   = document.getElementById('fn').value.trim();
+  const url    = document.getElementById('fu').value.trim();
+  const limit  = parseInt(document.getElementById('fl').value)||1;
+  const price  = parseFloat(document.getElementById('fp').value)||0;
+  const expMsg = document.getElementById('fm').value.trim()||'Acces expire. Contactez BDoniel.';
+  if(!artist){notif('Indique le nom de l artiste !');return;}
+  if(!name){notif('Indique le titre !');return;}
+  if(!url||!url.startsWith('http')){notif('Lien invalide !');return;}
+  const id='qr_'+Date.now(), link=BASE+'/?scan='+id;
+  const code = genCode(artist); // ex: ED-4821
+  try {
+    await window._fb.set(fb('qrcodes/'+id),{id,artist,name,url,limit,price,scans:0,expiredMsg:expMsg,created:Date.now(),accessLink:link,code});
+    lastId=id;
+    showResult({id,artist,name,url,limit,price,scans:0,accessLink:link,code});
+    notif('QR Code cree ! Code : #'+code);
+  } catch(e){notif('Erreur : '+e.message);}
+}
+
+function clearForm(){
+  ['fn','fu','fm','fp','fa-new'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('fa-sel').value='';
+  document.getElementById('fl').value='1';
+}
+
+// ── Show personalized QR card ──────────────────────────────────────────────────
+function showResult(item) {
+  const box = document.getElementById('qbox');
+  box.innerHTML = '';
+  const tmp = document.createElement('div');
+  tmp.style.cssText='position:absolute;left:-9999px;top:-9999px;background:white;';
+  document.body.appendChild(tmp);
+  new QRCode(tmp,{text:item.accessLink,width:300,height:300,colorDark:'#000000',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.H});
+  setTimeout(()=>{
+    const qrc=tmp.querySelector('canvas');
+    if(!qrc){document.body.removeChild(tmp);return;}
+    const canvas=document.createElement('canvas');
+    canvas.width=600;canvas.height=800;
+    const ctx=canvas.getContext('2d');
+    // Background blanc
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,600,800);
+    // Top bar
+    const g=ctx.createLinearGradient(0,0,600,0);g.addColorStop(0,'#6ee7b7');g.addColorStop(1,'#818cf8');
+    ctx.fillStyle=g;ctx.fillRect(0,0,600,8);
+    // Artist
+    ctx.fillStyle='#d97706';ctx.font='bold 30px Arial';ctx.textAlign='center';
+    ctx.fillText(item.artist.toUpperCase(),300,58);
+    // Title
+    ctx.fillStyle='#111827';ctx.font='bold 22px Arial';
+    ctx.fillText(item.name,300,94);
+    // Divider
+    ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(40,112);ctx.lineTo(560,112);ctx.stroke();
+    // QR white bg
+    ctx.fillStyle='#f3f4f6';ctx.beginPath();
+    ctx.roundRect?ctx.roundRect(120,124,360,360,16):ctx.rect(120,124,360,360);ctx.fill();
+    // QR
+    ctx.drawImage(qrc,150,154,300,300);
+    // Scan instruction
+    ctx.fillStyle='#059669';ctx.font='bold 19px Arial';
+    ctx.fillText('SCANNEZ POUR ACCEDER AU CONTENU',300,540);
+    // Divider
+    ctx.strokeStyle='#e5e7eb';ctx.beginPath();ctx.moveTo(40,558);ctx.lineTo(560,558);ctx.stroke();
+    // Code unique
+    ctx.fillStyle='#f0fdf4';ctx.fillRect(160,570,280,44);
+    ctx.strokeStyle='#6ee7b7';ctx.lineWidth=1.5;ctx.strokeRect(160,570,280,44);
+    ctx.fillStyle='#374151';ctx.font='bold 13px Arial';ctx.fillText('CODE DE RENOUVELLEMENT',300,588);
+    ctx.fillStyle='#059669';ctx.font='bold 26px Arial';
+    ctx.fillText('#'+(item.code||'----'),300,618);
+    // Bottom bar
+    ctx.fillStyle=g;ctx.fillRect(0,792,600,8);
+    document.body.removeChild(tmp);
+    canvas.style.cssText='width:100%;max-width:380px;border-radius:12px;display:block;margin:0 auto;box-shadow:0 8px 32px rgba(0,0,0,.5);';
+    box.appendChild(canvas);
+    box._canvas=canvas;box._item=item;
+    document.getElementById('qinfo').innerHTML=
+      '<p>Code : <span class="hl">#'+(item.code||'----')+'</span></p>'+
+      '<p>Artiste : <span>'+item.artist+'</span></p>'+
+      '<p>Titre : <span>'+item.name+'</span></p>'+
+      '<p>Scans max : <span class="hl">'+item.limit+' scan(s)</span></p>'+
+      '<p>Prix : <span>'+(item.price>0?item.price.toLocaleString('fr-FR')+' FCFA':'Gratuit')+'</span></p>';
+    const res=document.getElementById('res');res.classList.add('show');res.scrollIntoView({behavior:'smooth'});
+  },400);
+}
+
+function dlPNG(){
+  const box=document.getElementById('qbox'),canvas=box._canvas,item=box._item;
+  if(!canvas){notif('Patiente 1s...');return;}
+  const nom=item?(item.artist+'-'+item.name).replace(/[^a-zA-Z0-9]/g,'_'):'QR';
+  const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='QR-'+nom+'.png';a.click();
+  notif('PNG telecharge !');
+}
+
+function nouveau(){
+  document.getElementById('res').classList.remove('show');
+  document.getElementById('qbox').innerHTML='';
+  clearForm();lastId=null;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── Render QR list ─────────────────────────────────────────────────────────────
+function renderList(){
+  const c=document.getElementById('lst');
+  const fa=document.getElementById('filter-artist').value;
+  const fs=document.getElementById('filter-status').value;
+  const search=(document.getElementById('search').value||'').toLowerCase().trim();
+  let f=[...items];
+  if(fa)f=f.filter(q=>q.artist===fa);
+  if(fs==='active')f=f.filter(q=>q.scans<q.limit);
+  if(fs==='expired')f=f.filter(q=>q.scans>=q.limit);
+  if(search)f=f.filter(q=>
+    (q.code||'').toLowerCase().includes(search)||
+    (q.artist||'').toLowerCase().includes(search)||
+    (q.name||'').toLowerCase().includes(search)
+  );
+  document.getElementById('lc').textContent='('+f.length+')';
+  c.innerHTML='';
+  if(!f.length){c.innerHTML='<div class="empty">Aucun QR code.</div>';return;}
+  f.forEach(item=>{
+    const ex=item.scans>=item.limit,pct=Math.min((item.scans/item.limit)*100,100);
+    const bc=pct<50?'#6ee7b7':pct<80?'#fbbf24':'#f87171';
+    const pr=item.price>0?item.price.toLocaleString('fr-FR')+' FCFA':'Gratuit';
+    const d=document.createElement('div');d.className='qi';
+    d.innerHTML='<div class="qth" id="it-'+item.id+'"></div>'+
+      '<div class="qii">'+
+        '<div class="qat">'+item.artist+'</div>'+
+        '<h3>'+item.name+'</h3>'+
+        '<div class="qmt">'+
+          (ex?'<span class="tg tg-r">Expire</span>':'<span class="tg tg-g">Actif</span>')+
+          '<span class="tg tg-p">'+item.scans+'/'+item.limit+' scans</span>'+
+          '<span class="tg tg-go">'+pr+'</span>'+
+          '<span class="tg" style="background:rgba(110,231,183,.1);color:#6ee7b7;border:1px solid rgba(110,231,183,.3)">#'+(item.code||'----')+'</span>'+
+        '</div>'+
+        '<div class="bw"><div class="br2"><div class="bf" style="width:'+pct+'%;background:'+bc+'"></div></div></div>'+
+      '</div>'+
+      '<div class="qac">'+
+        '<button class="bsm" onclick="voirQR(\''+item.id+'\')">Voir QR</button>'+
+        '<button class="bsm" onclick="genDepuis(\''+item.id+'\')" title="Nouveau QR avec memes infos">+ Nouveau</button>'+
+        (ex?'<button class="bsm" style="color:var(--a);border-color:var(--a)" onclick="reactiver(\''+item.id+'\')">Reactiver</button>':'<button class="bsm" onclick="resetScans(\''+item.id+'\')">Reset</button>')+
+        '<button class="bdr" onclick="delQR(\''+item.id+'\')">Suppr.</button>'+
+      '</div>';
+    c.appendChild(d);
+    new QRCode(document.getElementById('it-'+item.id),{text:item.accessLink,width:52,height:52,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.M});
+  });
+}
+
+function filtrerExpires(){
+  document.getElementById('filter-status').value='expired';
+  document.getElementById('search').value='';
+  renderList();
+}
+function clearFilters(){
+  document.getElementById('filter-status').value='';
+  document.getElementById('filter-artist').value='';
+  document.getElementById('search').value='';
+  renderList();
+}
+
+function voirQR(id){const item=items.find(q=>q.id===id);if(!item)return;lastId=id;showResult(item);document.getElementById('res').scrollIntoView({behavior:'smooth'});}
+async function resetScans(id){await window._fb.update(fb('qrcodes/'+id),{scans:0});notif('Compteur remis a zero !');}
+async function delQR(id){if(!confirm('Supprimer ce QR code ?'))return;await window._fb.remove(fb('qrcodes/'+id));notif('QR supprime.');}
+
+// ── Reactiver un QR expire ─────────────────────────────────────────────────────
+async function reactiver(id) {
+  const item = items.find(q=>q.id===id);
+  if(!item)return;
+  if(!confirm('Reactiver le QR de '+item.artist+' - '+item.name+' ?\nLe compteur sera remis a '+item.limit+' scan(s).'))return;
+  await window._fb.update(fb('qrcodes/'+id), {scans:0});
+  notif('QR reactrive ! '+item.artist+' peut scanner a nouveau.');
+}
+
+// ── Generer rapidement depuis un QR existant ───────────────────────────────────
+function genDepuis(id) {
+  const item = items.find(q=>q.id===id);
+  if(!item)return;
+  // Pre-remplir le formulaire avec les infos existantes
+  document.getElementById('fa-new').value = item.artist;
+  document.getElementById('fa-sel').value = '';
+  document.getElementById('fn').value = item.name;
+  document.getElementById('fu').value = item.url;
+  document.getElementById('fp').value = item.price||0;
+  document.getElementById('fl').value = item.limit;
+  document.getElementById('fm').value = item.expiredMsg||'';
+  // Cacher le résultat précédent
+  document.getElementById('res').classList.remove('show');
+  document.getElementById('qbox').innerHTML='';
+  lastId = null;
+  // Scroll vers le formulaire
+  document.querySelector('.card').scrollIntoView({behavior:'smooth'});
+  notif('Formulaire pre-rempli pour '+item.artist+' - modifie si besoin et genere !');
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
+function renderStats(){
+  const t=items.length,a=items.filter(q=>q.scans<q.limit).length,ex=items.filter(q=>q.scans>=q.limit).length;
+  const sc=items.reduce((s,q)=>s+q.scans,0),rv=items.reduce((s,q)=>s+(q.scans*(q.price||0)),0);
+  document.getElementById('stats').innerHTML=
+    '<div class="sc"><div class="sl">QR Codes</div><div class="sv pu">'+t+'</div></div>'+
+    '<div class="sc"><div class="sl">Actifs</div><div class="sv gn">'+a+'</div></div>'+
+    '<div class="sc"><div class="sl">Expires</div><div class="sv rd">'+ex+'</div></div>'+
+    '<div class="sc"><div class="sl">Revenus totaux</div><div class="sv go">'+rv.toLocaleString('fr-FR')+' <span style="font-size:13px">FCFA</span></div></div>';
+}
+
+function renderArtists(){
+  const arts=getArtists(),grid=document.getElementById('art-grid'),em=document.getElementById('art-empty');
+  if(!arts.length){grid.innerHTML='';em.style.display='block';return;}em.style.display='none';
+  grid.innerHTML='';
+  arts.forEach(artist=>{
+    const it=items.filter(q=>q.artist===artist);
+    const sc=it.reduce((s,q)=>s+q.scans,0),rv=it.reduce((s,q)=>s+(q.scans*(q.price||0)),0),ex=it.filter(q=>q.scans>=q.limit).length;
+    const d=document.createElement('div');d.className='ac';
+    d.innerHTML='<div class="ac-hdr">'+
+        '<div><div style="font-size:10px;color:var(--m);font-family:DM Mono,monospace;margin-bottom:3px">ARTISTE</div><div class="ac-name">'+artist+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:10px;color:var(--m);font-family:DM Mono,monospace;margin-bottom:3px">REVENUS</div><div class="ac-rev">'+rv.toLocaleString('fr-FR')+' FCFA</div></div>'+
+      '</div>'+
+      '<div class="ac-stats">'+
+        '<div class="ac-stat"><div class="ac-sv" style="color:var(--a2)">'+it.length+'</div><div class="ac-sl">QR</div></div>'+
+        '<div class="ac-stat"><div class="ac-sv" style="color:var(--a)">'+sc+'</div><div class="ac-sl">Scans</div></div>'+
+        '<div class="ac-stat"><div class="ac-sv" style="color:var(--r)">'+ex+'</div><div class="ac-sl">Expires</div></div>'+
+      '</div>'+
+      '<div class="ac-tracks">'+
+        '<div style="font-size:10px;color:var(--m);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-family:DM Mono,monospace">Titres</div>'+
+        it.map(i=>'<div class="ac-track"><span class="ac-tname" title="'+i.name+'">'+i.name+'</span><span class="ac-tinfo">'+i.scans+'/'+i.limit+'</span><span class="ac-tprice">'+(i.scans*(i.price||0)).toLocaleString('fr-FR')+' FCFA</span></div>').join('')+
+      '</div>';
+    grid.appendChild(d);
+  });
+}
+
+function renderLog(){
+  const w=document.getElementById('log-wrap');
+  if(!logs.length){w.innerHTML='<div class="empty">Aucun scan enregistre.</div>';return;}
+  w.innerHTML='<table class="lt"><thead><tr><th>Date &amp; Heure</th><th>Artiste</th><th>Titre</th><th>Restants</th></tr></thead><tbody>'+
+    logs.slice(0,60).map(l=>'<tr><td>'+new Date(l.time).toLocaleString('fr-FR')+'</td><td style="color:var(--g)">'+(l.artist||'--')+'</td><td>'+l.name+'</td><td><span class="tg '+(l.remaining>0?'tg-g':'tg-r')+'">'+l.remaining+'</span></td></tr>').join('')+
+  '</tbody></table>';
+}
+
+// ── PDF Export ─────────────────────────────────────────────────────────────────
+function q2c(text,size){return new Promise(res=>{const d=document.createElement('div');d.style.cssText='position:absolute;left:-9999px;top:-9999px;background:white;';document.body.appendChild(d);new QRCode(d,{text,width:size,height:size,colorDark:'#000',colorLight:'#fff',correctLevel:QRCode.CorrectLevel.H});setTimeout(()=>{const c=d.querySelector('canvas');document.body.removeChild(d);res(c?c.toDataURL('image/png'):null);},350);});}
+
+async function xAllPDF(){
+  if(!items.length){notif('Aucun QR code !');return;}
+  document.getElementById('pmsg').textContent='Export '+items.length+' QR...';
+  document.getElementById('po').classList.add('open');
+  try{await buildPDF(items);notif('PDF exporte !');}catch(e){notif('Erreur PDF');}
+  document.getElementById('po').classList.remove('open');
+}
+
+async function buildPDF(its){
+  const{jsPDF}=window.jspdf,doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pW=210,pH=297,mg=14,cols=2,cW=(pW-mg*2-8)/cols,cH=112;
+  function hdr(p){
+    doc.setFillColor(10,10,15);doc.rect(0,0,pW,17,'F');
+    doc.setTextColor(110,231,183);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text('QR VAULT',mg,11);
+    doc.setTextColor(100,116,139);doc.setFontSize(8);doc.setFont('helvetica','normal');
+    doc.text(new Date().toLocaleDateString('fr-FR'),pW-mg,11,{align:'right'});
+    doc.text('Page '+p,pW/2,11,{align:'center'});
+  }
+  hdr(1);let col=0,row=0,pn=1;
+  for(let i=0;i<its.length;i++){
+    const item=its[i];let cx=mg+col*(cW+8),cy=22+row*(cH+8);
+    if(cy+cH>pH-mg){doc.addPage();pn++;hdr(pn);col=0;row=0;cx=mg;cy=22;}
+    const ex=item.scans>=item.limit,pr=item.price>0?item.price.toLocaleString('fr-FR')+' FCFA':'Gratuit';
+    doc.setFillColor(22,22,31);doc.setDrawColor(ex?248:110,ex?113:231,ex?113:183);doc.setLineWidth(.3);doc.roundedRect(cx,cy,cW,cH,3,3,'FD');
+    doc.setDrawColor(245,158,11);doc.setLineWidth(1);doc.line(cx+3,cy+.5,cx+cW-3,cy+.5);doc.setLineWidth(.3);
+    const qi=await q2c(item.accessLink,180);
+    if(qi){doc.setFillColor(255,255,255);doc.roundedRect(cx+5,cy+6,39,39,2,2,'F');doc.addImage(qi,'PNG',cx+6.5,cy+7.5,36,36);}
+    doc.setFillColor(...(ex?[248,113,113]:[110,231,183]));doc.roundedRect(cx+cW-24,cy+5,18,6,1.5,1.5,'F');
+    doc.setTextColor(10,10,15);doc.setFontSize(6.5);doc.setFont('helvetica','bold');doc.text(ex?'EXPIRE':'ACTIF',cx+cW-15,cy+9.3,{align:'center'});
+    doc.setTextColor(245,158,11);doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.text(item.artist,cx+47,cy+12);
+    doc.setTextColor(226,232,240);doc.setFontSize(9.5);doc.setFont('helvetica','bold');doc.text(doc.splitTextToSize(item.name,cW-52).slice(0,2),cx+47,cy+20);
+    doc.setTextColor(245,158,11);doc.setFontSize(8);doc.setFont('helvetica','bold');doc.text(pr,cx+47,cy+30);
+    doc.setTextColor(129,140,248);doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.text(item.scans+'/'+item.limit+' scans - '+(item.limit-item.scans)+' restant(s)',cx+47,cy+37);
+    const bx=cx+5,by=cy+50,bw=cW-10,bh=2.5,pct=Math.min(item.scans/item.limit,1);
+    doc.setFillColor(37,37,53);doc.roundedRect(bx,by,bw,bh,1,1,'F');
+    if(pct>0){doc.setFillColor(...(pct<.5?[110,231,183]:pct<.8?[251,191,36]:[248,113,113]));doc.roundedRect(bx,by,bw*pct,bh,1,1,'F');}
+    doc.setTextColor(245,158,11);doc.setFontSize(7);doc.setFont('helvetica','bold');doc.text('Revenus : '+(item.scans*(item.price||0)).toLocaleString('fr-FR')+' FCFA',cx+5,cy+60);
+    doc.setTextColor(100,116,139);doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.text('Cree le '+new Date(item.created).toLocaleDateString('fr-FR'),cx+5,cy+67);
+    doc.setDrawColor(37,37,53);doc.setLineWidth(.2);doc.line(cx+5,cy+74,cx+cW-5,cy+74);
+    doc.setFontSize(6);doc.text('Lien : '+(item.url.length>52?item.url.slice(0,49)+'...':item.url),cx+5,cy+80);
+    col++;if(col>=cols){col=0;row++;}
+  }
+  const tp=doc.getNumberOfPages();
+  for(let p=1;p<=tp;p++){doc.setPage(p);doc.setFillColor(10,10,15);doc.rect(0,pH-9,pW,9,'F');doc.setTextColor(100,116,139);doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.text('QR Vault - '+new Date().toLocaleString('fr-FR'),mg,pH-3.5);doc.text(its.length+' QR - Page '+p+'/'+tp,pW-mg,pH-3.5,{align:'right'});}
+  doc.save('qr-vault-'+new Date().toISOString().slice(0,10)+'.pdf');
+}
+
+// ── Notif ──────────────────────────────────────────────────────────────────────
+function notif(msg){const n=document.createElement('div');n.className='notif';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),3000);}
+</script>
+</body>
+</html>
