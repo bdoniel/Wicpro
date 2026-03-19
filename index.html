@@ -9,7 +9,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script>
-const app = firebase.initializeApp({
+// Initialize Firebase immediately - compat SDK is synchronous
+firebase.initializeApp({
   apiKey:"AIzaSyDyn-0tNhiB6jPWKQzZSHc0t470JYahJoo",
   authDomain:"qr-vault-be047.firebaseapp.com",
   databaseURL:"https://qr-vault-be047-default-rtdb.firebaseio.com",
@@ -18,17 +19,8 @@ const app = firebase.initializeApp({
   messagingSenderId:"469897558507",
   appId:"1:469897558507:web:8e9eb783c5df4b797441ae"
 });
-const db = firebase.database();
-window._fb = {
-  db,
-  ref: (db, path) => db.ref(path),
-  set: (ref, val) => ref.set(val),
-  get: (ref) => ref.once('value'),
-  update: (ref, val) => ref.update(val),
-  onValue: (ref, cb) => ref.on('value', cb),
-  remove: (ref) => ref.remove()
-};
-document.dispatchEvent(new Event('fb-ready'));
+window._fb = { db: firebase.database() };
+window._fbReady = true;
 </script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap');
@@ -344,15 +336,20 @@ async function fbSet(p,v){ return fb(p).set(v); }
 async function fbUpd(p,v){ return fb(p).update(v); }
 
 // ── Firebase ready ─────────────────────────────────────────────────────────────
-document.addEventListener('fb-ready', () => {
+document.addEventListener('DOMContentLoaded', () => {
+  if (!window._fbReady) { setTimeout(()=>location.reload(), 2000); return; }
   document.getElementById('dot').classList.add('on');
   const sid = new URLSearchParams(location.search).get('scan');
   if (sid) { handleScan(sid); return; }
   document.getElementById('loading').classList.add('hide');
   document.getElementById('app').style.display = 'block';
-  fb('qrcodes').on("value", snap => {
+  fb('qrcodes').on('value', snap => {
     items = Object.values(snap.val()||{}).sort((a,b)=>(b.created||0)-(a.created||0));
     refreshSelects(); renderList();
   });
-  fb('scanlogs').on("value", snap => {
-    logs = Object.valu
+  fb('scanlogs').on('value', snap => {
+    logs = Object.values(snap.val()||{}).sort((a,b)=>(b.time||0)-(a.time||0));
+  });
+});
+
+// ── Scan handler ─────────────────────────────────────
