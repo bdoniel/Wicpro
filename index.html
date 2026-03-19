@@ -6,11 +6,10 @@
 <title>QR Vault</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, update, onValue, remove }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-const app = initializeApp({
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script>
+const app = firebase.initializeApp({
   apiKey:"AIzaSyDyn-0tNhiB6jPWKQzZSHc0t470JYahJoo",
   authDomain:"qr-vault-be047.firebaseapp.com",
   databaseURL:"https://qr-vault-be047-default-rtdb.firebaseio.com",
@@ -19,8 +18,16 @@ const app = initializeApp({
   messagingSenderId:"469897558507",
   appId:"1:469897558507:web:8e9eb783c5df4b797441ae"
 });
-const db = getDatabase(app);
-window._fb = {db,ref,set,get,update,onValue,remove};
+const db = firebase.database();
+window._fb = {
+  db,
+  ref: (db, path) => db.ref(path),
+  set: (ref, val) => ref.set(val),
+  get: (ref) => ref.once('value'),
+  update: (ref, val) => ref.update(val),
+  onValue: (ref, cb) => ref.on('value', cb),
+  remove: (ref) => ref.remove()
+};
 document.dispatchEvent(new Event('fb-ready'));
 </script>
 <style>
@@ -330,7 +337,11 @@ select option{background:var(--s)}
 const BASE = 'https://wicpro.vercel.app';
 let items = [], logs = [], lastId = null;
 
-function fb(p){ return window._fb.ref(window._fb.db, p); }
+function fb(p){ return window._fb.db.ref(p); }
+
+async function fbGet(p){ const snap = await fb(p).once('value'); return snap.val(); }
+async function fbSet(p,v){ return fb(p).set(v); }
+async function fbUpd(p,v){ return fb(p).update(v); }
 
 // ── Firebase ready ─────────────────────────────────────────────────────────────
 document.addEventListener('fb-ready', () => {
@@ -339,17 +350,9 @@ document.addEventListener('fb-ready', () => {
   if (sid) { handleScan(sid); return; }
   document.getElementById('loading').classList.add('hide');
   document.getElementById('app').style.display = 'block';
-  window._fb.onValue(fb('qrcodes'), snap => {
+  fb('qrcodes').on("value", snap => {
     items = Object.values(snap.val()||{}).sort((a,b)=>(b.created||0)-(a.created||0));
     refreshSelects(); renderList();
   });
-  window._fb.onValue(fb('scanlogs'), snap => {
-    logs = Object.values(snap.val()||{}).sort((a,b)=>(b.time||0)-(a.time||0));
-  });
-});
-
-// ── Scan handler ───────────────────────────────────────────────────────────────
-async function handleScan(id) {
-  document.getElementById('lmsg').textContent = 'Verification acces...';
-  try {
-    const item = (await window._fb.get(fb('q
+  fb('scanlogs').on("value", snap => {
+    logs = Object.valu
