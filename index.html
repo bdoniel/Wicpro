@@ -337,19 +337,22 @@ async function fbUpd(p,v){ return fb(p).update(v); }
 
 // ── Firebase ready ─────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  if (!window._fbReady) { setTimeout(()=>location.reload(), 2000); return; }
-  document.getElementById('dot').classList.add('on');
-  const sid = new URLSearchParams(location.search).get('scan');
-  if (sid) { handleScan(sid); return; }
-  document.getElementById('loading').classList.add('hide');
-  document.getElementById('app').style.display = 'block';
-  fb('qrcodes').on('value', snap => {
-    items = Object.values(snap.val()||{}).sort((a,b)=>(b.created||0)-(a.created||0));
-    refreshSelects(); renderList();
-  });
-  fb('scanlogs').on('value', snap => {
-    logs = Object.values(snap.val()||{}).sort((a,b)=>(b.time||0)-(a.time||0));
-  });
-});
+  // Timeout de securite - si Firebase ne repond pas en 5s
+  const timeout = setTimeout(() => {
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('lmsg').textContent = 'Erreur connexion';
+    notif('Erreur Firebase - verifie ta connexion internet');
+  }, 5000);
 
-// ── Scan handler ─────────────────────────────────────
+  try {
+    if (!window._fbReady || !window._fb) {
+      clearTimeout(timeout);
+      document.getElementById('lmsg').textContent = 'Firebase non disponible';
+      return;
+    }
+
+    // Test Firebase connection
+    fb('qrcodes').once('value').then(() => {
+      clearTimeout(timeout);
+      document.getElementById('dot').classList.add('on'
