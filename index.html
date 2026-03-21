@@ -322,12 +322,13 @@ const BASE = 'https://bdoniel.github.io/Wicpro';
 let items = [], logs = [], lastId = null, plItem = null, plQRId = null;
 
 // ── Init ───────────────────────────────────────────────────────────────────────
-window.onload = function() {
-  DB.ref('qrcodes').once('value')
-    .then(() => {
+document.addEventListener('DOMContentLoaded', function() {
+  const sid = new URLSearchParams(location.search).get('scan');
+  if (sid) { handleScan(sid); return; }
+  
+  DB.ref('.info/connected').on('value', snap => {
+    if (snap.val() === true) {
       document.getElementById('dot').classList.add('on');
-      const sid = new URLSearchParams(location.search).get('scan');
-      if (sid) { handleScan(sid); return; }
       document.getElementById('loading').classList.add('hide');
       document.getElementById('app').style.display = 'block';
       DB.ref('qrcodes').on('value', snap => {
@@ -337,21 +338,20 @@ window.onload = function() {
       DB.ref('scanlogs').on('value', snap => {
         logs = Object.values(snap.val()||{}).sort((a,b)=>(b.time||0)-(a.time||0));
       });
-    })
-    .catch(err => {
-      document.getElementById('lmsg').textContent = 'Erreur: ' + err.message;
-    });
-};
+    }
+  });
+
+  // Timeout apres 8 secondes
+  setTimeout(() => {
+    if (document.getElementById('loading').style.display !== 'none' &&
+        !document.getElementById('loading').classList.contains('hide')) {
+      document.getElementById('loading').classList.add('hide');
+      document.getElementById('app').style.display = 'block';
+      notif('Connexion lente - verifie ton internet');
+    }
+  }, 8000);
+});
 
 // ── Scan ───────────────────────────────────────────────────────────────────────
 async function handleScan(id) {
-  document.getElementById('lmsg').textContent = 'Verification...';
-  try {
-    const snap = await DB.ref('qrcodes/'+id).once('value');
-    const item = snap.val();
-    document.getElementById('loading').classList.add('hide');
-
-    if (!item) {
-      document.getElementById('scan-page').classList.add('open');
-      document.getElementById('si').textContent = '?';
-      document.get
+  document.getElementById('lmsg')
